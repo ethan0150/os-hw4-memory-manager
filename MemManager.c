@@ -118,12 +118,7 @@ char pidToChar(int pid)
 {
     return (char)pid + 'A';
 }
-/*
-void print_pt(){
-    FOR(max_vp){
 
-    }
-}*/
 
 void print_tlb()
 {
@@ -205,9 +200,9 @@ int update_tlb() // hit: return 1, miss: return 0
         }
     }
     ret = (tlbidx != -1);
+    tlbHitCnt[pid]++;
     if(ret)  // hit
     {
-        tlbHitCnt[pid]++;
         pt[pid][vpn].ref = 1;
         if(tlbPlc)  // LRU
         {
@@ -232,42 +227,13 @@ int update_tlb() // hit: return 1, miss: return 0
                 del_intarr((rand() % MAXTLB), tlb, &tlbCnt);
             }
         }
-        //tlb[tlbCnt-1] = vpn;
-        //tlbCnt++;
+
         ins_intarr(tlbCnt, vpn, tlb, &tlbCnt);
     }
 
     return ret;
 }
-/*
-void page_out(){// put a page to disk, freeing a frame
-    RE out, in;
-    int freeidx;
-    //remove RE from replList and
-    if(allocPlc){// local
-        if(replPlc){// FIFO
-            out.vpn = localRepl[pid][0];
-            freeidx = pt[pid][out.vpn].pfn;
-            del_intarr(0, localRepl[pid], &localCnt[pid]);
-        }
-        else{// CLOCK
-            int lastidx;
-            if(pt[pid][localRepl[pid][globalclk]].ref){
-                while(pt[pid][localRepl[pid][globalclk]].ref){
-                    pt[pid][localRepl[pid][globalclk]].ref = 0;
-                    lastidx = globalclk;
-                    globalclk++;
-                    globalclk %= localCnt[pid];
-                }
-                out.vpn = localRepl[pid][lastidx];
-                freeidx = pt[pid][out.vpn].pfn;
-                localRepl[pid][lastidx] = vpn;
-            }
-        }
-    }
 
-}
-*/
 void pf_handler()
 {
     pfCnt[pid]++;
@@ -419,53 +385,6 @@ void pf_handler()
            vpn,
            src
           );
-    /*if(freeframeidx == 63){
-        printf("(%d %d %d)\n", globalclk, globalCnt, insidx);
-    }*/
-    //printf("out.pid: %d\n", out.pid);
-}
-void pf_handler_new()
-{
-    pfCnt[pid]++;
-    RE out = (RE)
-    {
-        .pid = pid, .vpn = -1
-    };
-    RE in = out;
-    int src = -1, dst = -1;
-    int freeframeidx = getFreeFrame();
-    if(freeframeidx == -1)  //page replacement
-    {
-        if(allocPlc) // local
-        {
-            if(replPlc)  // fifo
-            {
-                del_intarr(0, localRepl[pid], &(localCnt[pid]));
-                ins_intarr(localCnt[pid], vpn, localRepl[pid], &localCnt[pid]);
-
-            }
-            else
-            {
-
-            }
-        }
-        else
-        {
-
-        }
-    }
-    else
-    {
-
-    }
-    printf("Page Fault, %d, Evict %d of Process %c to %d, %d<<%d\n",
-           freeframeidx,
-           out.vpn,
-           pidToChar(out.pid),
-           dst,
-           vpn,
-           src
-          );
 }
 
 void analyze()
@@ -530,17 +449,9 @@ int main(void)
             else
             {
                 pf_handler();
-                if(vpn == 63)
-                {
-                    //print
-                }
             }
         }
         printf("Process %c, TLB Hit, %d=>%d\n", pchar, vpn, pt[pid][vpn].pfn);
-        if(vpn == 63)
-        {
-
-        }
     }
     freopen("analysis.txt", "w", stdout);
     analyze();
