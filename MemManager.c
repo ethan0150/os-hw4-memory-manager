@@ -417,11 +417,11 @@ int main(void)
 {
     srand(time(NULL));
     buf = malloc(len);
-    //readcfg();
-    tlbPlc = 1;
-    allocPlc = 0;
-    replPlc = 1;
-    max_pf = 64;
+    readcfg();
+    //tlbPlc = 1;
+    //allocPlc = 0;
+    //replPlc = 1;
+    //max_pf = 64;
     FOR(MAXP)  // initialize pt
     {
         FORj(MAXN)
