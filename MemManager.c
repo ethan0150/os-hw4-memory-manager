@@ -3,7 +3,7 @@
 #include<string.h>
 #include<time.h>
 #include<assert.h>
-//#include<limits.h>
+#include<limits.h>
 //#include<stdbool.h>
 
 #define MAXM 1024
@@ -27,7 +27,7 @@ typedef struct replEntry
     int vpn;
 } RE;
 
-FILE *tmpfp = NULL, *fp = NULL;
+FILE *tmpfp = NULL, *fp = NULL, *outfp = NULL, *anafp = NULL;
 
 PTE pt[MAXP][MAXN]; // pt[VPN]
 int tlb[MAXTLB] = {0}, tlbCnt = 0; // TLB[i] cantains VPN
@@ -126,7 +126,7 @@ char pidToChar(int pid)
 
 void print_tlb()
 {
-    printf("[Debug] ");
+    printf("ref %d: ", refnum);
     FOR(tlbCnt)
     {
         printf("%d ", tlb[i]);
@@ -185,12 +185,11 @@ void readcfg()
 int update_tlb() // hit: return 1, miss: return 0
 {
     int ret, tlbidx = -1;
-    tlbRefCnt[pid]++;
     if(last_pid != pid)
     {
         FOR(MAXTLB)
         {
-            tlb[i] = -1;
+            tlb[i] = INT_MIN;
         }
         tlbCnt = 0;
     }
@@ -213,25 +212,25 @@ int update_tlb() // hit: return 1, miss: return 0
             ins_intarr(tlbCnt, vpn, tlb, &tlbCnt);
         }
     }
-    else  // miss
+    /*else  // miss
     {
         if(tlbPlc)
         {
             if(tlbCnt == MAXTLB)
             {
-                del_intarr(0, tlb, &tlbCnt);
+                //del_intarr(0, tlb, &tlbCnt);
             }
         }
         else
         {
             if(tlbCnt == MAXTLB)
             {
-                del_intarr((rand() % MAXTLB), tlb, &tlbCnt);
+                //del_intarr((rand() % MAXTLB), tlb, &tlbCnt);
             }
         }
 
-        ins_intarr(tlbCnt, vpn, tlb, &tlbCnt);
-    }
+        //ins_intarr(tlbCnt, vpn, tlb, &tlbCnt);
+    }*/
 
     return ret;
 }
@@ -328,11 +327,35 @@ void pf_handler()
                 }
             }
         }
+
         tlbidx = search_tlb(out.vpn);
-        if(tlbidx != -1 && allocPlc)
+        if(tlbCnt == MAXTLB)
         {
-            del_intarr(tlbidx, tlb, &tlbCnt);
+            if(tlbidx != -1)
+            {
+                del_intarr(tlbidx, tlb, &tlbCnt);
+            }
+            else
+            {
+                if(tlbPlc)
+                {
+                    del_intarr(0, tlb, &tlbCnt);
+                }
+                else
+                {
+                    del_intarr(rand() % tlbCnt, tlb, &tlbCnt);
+                }
+            }
         }
+        else
+        {
+            if(tlbidx != -1)
+            {
+                del_intarr(tlbidx, tlb, &tlbCnt);
+            }
+        }
+        ins_intarr(tlbCnt, vpn, tlb, &tlbCnt);
+
         freeframeidx = pt[out.pid][out.vpn].pfn;
         pt[out.pid][out.vpn] = (PTE)
         {
@@ -350,6 +373,18 @@ void pf_handler()
         }
         else insidx = globalCnt;
 
+        if(tlbCnt == MAXTLB)
+        {
+            if(tlbPlc)
+            {
+                del_intarr(0, tlb, &tlbCnt);
+            }
+            else
+            {
+                del_intarr(rand() % tlbCnt, tlb, &tlbCnt);
+            }
+        }
+        ins_intarr(tlbCnt, vpn, tlb, &tlbCnt);
     }
 
     assert(freeframeidx != -1);
@@ -377,14 +412,14 @@ void pf_handler()
         }, globalRepl, &globalCnt);
     }
 
-    printf("Page Fault, %d, Evict %d of Process %c to %d, %d<<%d\n",
-           freeframeidx,
-           out.vpn,
-           pidToChar(out.pid),
-           dst,
-           vpn,
-           src
-          );
+    fprintf(outfp, "Page Fault, %d, Evict %d of Process %c to %d, %d<<%d\n",
+            freeframeidx,
+            out.vpn,
+            pidToChar(out.pid),
+            dst,
+            vpn,
+            src
+           );
 }
 
 void analyze()
@@ -393,10 +428,9 @@ void analyze()
     {
         float alpha = (float)refCnt[i] / (float)tlbRefCnt[i];
         float EAT = 220 - 100 * alpha;
-        printf("Process %c, Effective Access Time = %0.3f\n", pidToChar(i),EAT);
-        printf("Process %c, Page Fault Rate: %0.3f\n", pidToChar(i), (float)pfCnt[i] / (float)refCnt[i]);
+        fprintf(anafp, "Process %c, Effective Access Time = %0.3f\n", pidToChar(i),EAT);
+        fprintf(anafp, "Process %c, Page Fault Rate: %0.3f\n", pidToChar(i), (float)pfCnt[i] / (float)refCnt[i]);
     }
-
 }
 
 int main(void)
@@ -404,7 +438,7 @@ int main(void)
     srand(time(NULL));
     buf = malloc(len);
     readcfg();
-    //tlbPlc = 1; allocPlc = 0; replPlc = 0; max_pf = 64;
+    //tlbPlc = 1; allocPlc = 0; replPlc = 1; max_pf = 64;
     FOR(MAXP)  // initialize pt
     {
         FORj(MAXN)
@@ -417,7 +451,7 @@ int main(void)
     }
 
     fp = fopen("trace.txt", "r");
-    freopen("trace_output.txt", "w", stdout);
+    outfp = fopen("trace_output.txt", "w");
     char delim[] = "(), ";
     int tlbidx = -1;
     while(getline(&buf, &len, fp) != EOF)
@@ -433,32 +467,39 @@ int main(void)
         refCnt[pid]++;
         if(update_tlb())  // TLB hit
         {
+            tlbRefCnt[pid]++;
         }
         else // TLB miss
         {
-            printf("Process %c, TLB Miss, ", pchar);
+            tlbRefCnt[pid] += 2;
+            fprintf(outfp, "Process %c, TLB Miss, ", pchar);
             if(pt[pid][vpn].pre == 1)  //if page hit:
             {
-                /*if(tlbCnt == MAXTLB){
-                    if(tlbPlc){ // lru
+                if(tlbCnt == MAXTLB)
+                {
+                    if(tlbPlc)  // lru
+                    {
                         del_intarr(0, tlb, &tlbCnt);
                     }
                     else del_intarr(rand() % tlbCnt, tlb, &tlbCnt);
                 }
-                ins_intarr(tlbCnt, vpn, tlb, &tlbCnt);*/
+                ins_intarr(tlbCnt, vpn, tlb, &tlbCnt);
                 pt[pid][vpn].ref = 1;
-                printf("Page Hit, %d=>%d\n", vpn, pt[pid][vpn].pfn);
+                fprintf(outfp, "Page Hit, %d=>%d\n", vpn, pt[pid][vpn].pfn);
             }
             else
             {
                 pf_handler();
             }
         }
-        printf("Process %c, TLB Hit, %d=>%d\n", pchar, vpn, pt[pid][vpn].pfn);
+        //print_tlb();
+        fprintf(outfp, "Process %c, TLB Hit, %d=>%d\n", pchar, vpn, pt[pid][vpn].pfn);
     }
-    freopen("analysis.txt", "w", stdout);
+    anafp = fopen("analysis.txt", "w");
     analyze();
     fclose(fp);
+    fclose(anafp);
+    fclose(outfp);
     free(buf);
     return 0;
 }
