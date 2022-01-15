@@ -3,6 +3,7 @@
 #include<string.h>
 #include<time.h>
 #include<assert.h>
+//#include<limits.h>
 //#include<stdbool.h>
 
 #define MAXM 1024
@@ -54,6 +55,9 @@ int refCnt[MAXP] = {0}, tlbHitCnt[MAXP] = {0}, pfCnt[MAXP] = {0}, pRefCnt[MAXP] 
 int vpn;
 int pid = 'z' - 'A', last_pid;
 char pchar;
+
+int refnum = 0;
+
 void ins_intarr(int idx, int n, int *arr, int *cur_len)
 {
     for(int i=*cur_len; i>idx; i--)
@@ -200,7 +204,6 @@ int update_tlb() // hit: return 1, miss: return 0
         }
     }
     ret = (tlbidx != -1);
-    tlbHitCnt[pid]++;
     if(ret)  // hit
     {
         pt[pid][vpn].ref = 1;
@@ -212,7 +215,6 @@ int update_tlb() // hit: return 1, miss: return 0
     }
     else  // miss
     {
-        tlbRefCnt[pid]++;
         if(tlbPlc)
         {
             if(tlbCnt == MAXTLB)
@@ -248,7 +250,6 @@ void pf_handler()
     //printf("%d\n", freeframeidx);
     if(freeframeidx == -1)
     {
-        //put page to disk and free frame
         if(allocPlc) // local
         {
             if(replPlc) // FIFO
@@ -265,7 +266,6 @@ void pf_handler()
                 while(pt[pid][localRepl[pid][localclk[pid]]].ref)
                 {
                     pt[pid][localRepl[pid][localclk[pid]]].ref = 0;
-                    //insidx = localclk[pid];
                     localclk[pid]++;
                     localclk[pid] %= localCnt[pid];
                     flag = 1;
@@ -305,7 +305,6 @@ void pf_handler()
                 while(pt[cur_RE.pid][cur_RE.vpn].ref)
                 {
                     pt[cur_RE.pid][cur_RE.vpn].ref = 0;
-                    //insidx = globalclk;
                     globalclk++;
                     globalclk %= globalCnt;
                     flag = 1;
@@ -350,6 +349,7 @@ void pf_handler()
             insidx = localCnt[pid];
         }
         else insidx = globalCnt;
+
     }
 
     assert(freeframeidx != -1);
@@ -391,10 +391,10 @@ void analyze()
 {
     for(int i=0; i<MAXP && tlbRefCnt[i]; i++)
     {
-        float hit_r = (float)tlbHitCnt[i] / (float)tlbRefCnt[i];
-        float EAT = (hit_r * 120) + ((1 - hit_r) * (2 * 100) + 20);
+        float alpha = (float)refCnt[i] / (float)tlbRefCnt[i];
+        float EAT = 220 - 100 * alpha;
         printf("Process %c, Effective Access Time = %0.3f\n", pidToChar(i),EAT);
-        printf("Process %c, Page Fault Rate: %0.3f\n", pidToChar(i), (float)pfCnt[i] / (float)pRefCnt[i]);
+        printf("Process %c, Page Fault Rate: %0.3f\n", pidToChar(i), (float)pfCnt[i] / (float)refCnt[i]);
     }
 
 }
@@ -404,7 +404,7 @@ int main(void)
     srand(time(NULL));
     buf = malloc(len);
     readcfg();
-    //tlbPlc = 1; allocPlc = 1; replPlc = 1; max_pf = 64;
+    //tlbPlc = 1; allocPlc = 0; replPlc = 0; max_pf = 64;
     FOR(MAXP)  // initialize pt
     {
         FORj(MAXN)
@@ -419,10 +419,9 @@ int main(void)
     fp = fopen("trace.txt", "r");
     freopen("trace_output.txt", "w", stdout);
     char delim[] = "(), ";
-    //printf("fuck\n");
+    int tlbidx = -1;
     while(getline(&buf, &len, fp) != EOF)
     {
-        //read a line of trace
         token = strtok(buf, delim);
         token = strtok(NULL, delim);
         last_pid = pid;
@@ -430,19 +429,23 @@ int main(void)
         pid = (int)(pchar - 'A');
         token = strtok(NULL, delim);
         sscanf(token, "%d", &vpn);
-
+        refnum++;
         refCnt[pid]++;
         if(update_tlb())  // TLB hit
         {
-            //printf("Process %c, TLB Hit, %d=>%d\n", pchar, vpn, pt[pid][vpn].pfn);
         }
         else // TLB miss
         {
-            pRefCnt[pid]++;
             printf("Process %c, TLB Miss, ", pchar);
             if(pt[pid][vpn].pre == 1)  //if page hit:
             {
-
+                /*if(tlbCnt == MAXTLB){
+                    if(tlbPlc){ // lru
+                        del_intarr(0, tlb, &tlbCnt);
+                    }
+                    else del_intarr(rand() % tlbCnt, tlb, &tlbCnt);
+                }
+                ins_intarr(tlbCnt, vpn, tlb, &tlbCnt);*/
                 pt[pid][vpn].ref = 1;
                 printf("Page Hit, %d=>%d\n", vpn, pt[pid][vpn].pfn);
             }
@@ -455,7 +458,6 @@ int main(void)
     }
     freopen("analysis.txt", "w", stdout);
     analyze();
-
     fclose(fp);
     free(buf);
     return 0;
