@@ -212,25 +212,6 @@ int update_tlb() // hit: return 1, miss: return 0
             ins_intarr(tlbCnt, vpn, tlb, &tlbCnt);
         }
     }
-    /*else  // miss
-    {
-        if(tlbPlc)
-        {
-            if(tlbCnt == MAXTLB)
-            {
-                //del_intarr(0, tlb, &tlbCnt);
-            }
-        }
-        else
-        {
-            if(tlbCnt == MAXTLB)
-            {
-                //del_intarr((rand() % MAXTLB), tlb, &tlbCnt);
-            }
-        }
-
-        //ins_intarr(tlbCnt, vpn, tlb, &tlbCnt);
-    }*/
 
     return ret;
 }
@@ -246,7 +227,6 @@ void pf_handler()
     int src = -1, dst = -1;
     int freeframeidx = getFreeFrame();
     int insidx, tlbidx;
-    //printf("%d\n", freeframeidx);
     if(freeframeidx == -1)
     {
         if(allocPlc) // local
@@ -331,7 +311,7 @@ void pf_handler()
         tlbidx = search_tlb(out.vpn);
         if(tlbCnt == MAXTLB)
         {
-            if(tlbidx != -1)
+            if(tlbidx != -1 && out.pid == pid)
             {
                 del_intarr(tlbidx, tlb, &tlbCnt);
             }
@@ -349,7 +329,7 @@ void pf_handler()
         }
         else
         {
-            if(tlbidx != -1)
+            if(tlbidx != -1 && out.pid == pid)
             {
                 del_intarr(tlbidx, tlb, &tlbCnt);
             }
@@ -437,8 +417,11 @@ int main(void)
 {
     srand(time(NULL));
     buf = malloc(len);
-    readcfg();
-    //tlbPlc = 1; allocPlc = 0; replPlc = 1; max_pf = 64;
+    //readcfg();
+    tlbPlc = 1;
+    allocPlc = 0;
+    replPlc = 1;
+    max_pf = 64;
     FOR(MAXP)  // initialize pt
     {
         FORj(MAXN)
@@ -492,7 +475,7 @@ int main(void)
                 pf_handler();
             }
         }
-        //print_tlb();
+        print_tlb();
         fprintf(outfp, "Process %c, TLB Hit, %d=>%d\n", pchar, vpn, pt[pid][vpn].pfn);
     }
     anafp = fopen("analysis.txt", "w");
